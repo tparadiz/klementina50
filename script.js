@@ -17,19 +17,14 @@
 
   // vrstni red = vrstni red rasti (od sredine navzven)
   const ROSES = [
-    { x: 180, y: 132, R: 46, rot: -6,  pal: 'rose'    },
-    { x: 180, y: 228, R: 40, rot: 10,  pal: 'fuchsia' },
-    { x: 110, y: 178, R: 37, rot: 14,  pal: 'powder'  },
-    { x: 252, y: 174, R: 38, rot: -12, pal: 'peach'   },
-    { x: 116, y: 272, R: 35, rot: -8,  pal: 'blush'   },
-    { x: 246, y: 276, R: 36, rot: 16,  pal: 'coral'   },
-    { x: 180, y: 326, R: 33, rot: 4,   pal: 'mauve'   },
-    { x: 54,  y: 232, R: 31, rot: 20,  pal: 'mauve'   },
-    { x: 308, y: 228, R: 31, rot: -18, pal: 'rose'    },
-    { x: 96,  y: 122, R: 27, rot: -14, pal: 'coral'   },
-    { x: 264, y: 118, R: 28, rot: 12,  pal: 'blush'   },
-    { x: 52,  y: 328, R: 27, rot: 8,   pal: 'peach'   },
-    { x: 310, y: 330, R: 27, rot: -6,  pal: 'fuchsia' },
+    { x: 180, y: 130, R: 50, rot: -6,  pal: 'rose'    },
+    { x: 108, y: 190, R: 42, rot: 14,  pal: 'powder'  },
+    { x: 254, y: 186, R: 43, rot: -12, pal: 'peach'   },
+    { x: 180, y: 244, R: 44, rot: 8,   pal: 'fuchsia' },
+    { x: 58,  y: 268, R: 34, rot: 20,  pal: 'mauve'   },
+    { x: 304, y: 268, R: 34, rot: -18, pal: 'coral'   },
+    { x: 118, y: 322, R: 35, rot: -8,  pal: 'blush'   },
+    { x: 244, y: 324, R: 36, rot: 16,  pal: 'rose'    },
   ];
 
   const BUDS = [
@@ -84,35 +79,74 @@
   }
 
   // ---- vrtnica ----
+  const mix = (hex, t, to = 255) => '#' + [1, 3, 5].map(i =>
+    Math.round(parseInt(hex.substr(i, 2), 16) * (1 - t) + to * t).toString(16).padStart(2, '0')).join('');
+
+  // preliv za vsak list: temno ob dnu, svetlo na robu
+  function addGradients(defs) {
+    for (const name in PAL) {
+      const p = PAL[name];
+      for (let j = 0; j < 4; j++) {
+        const g = el('linearGradient', { id: `g-${name}-${j}`, x1: 0, y1: 1, x2: 0, y2: 0 }, defs);
+        el('stop', { offset: 0,   'stop-color': p[Math.min(j + 1, 3)] }, g);
+        el('stop', { offset: .5,  'stop-color': p[j] }, g);
+        el('stop', { offset: 1,   'stop-color': mix(p[j], j === 0 ? .35 : .22) }, g);
+      }
+    }
+  }
+
+  // cvetni list, obrnjen navzgor, dolžine h in širine w; zgornji rob je rahlo zavihan
+  function petal(parent, name, j, w, h, off, ang, shade) {
+    const p = PAL[name];
+    const g = el('g', { transform: `rotate(${f(ang)}) translate(0 ${f(-off)})` }, parent);
+    el('path', {
+      d: `M0 0C${f(-.8 * w)} ${f(-.15 * h)} ${f(-1.05 * w)} ${f(-.7 * h)} ${f(-.6 * w)} ${f(-.96 * h)}` +
+         `Q${f(-.2 * w)} ${f(-1.1 * h)} 0 ${f(-1.04 * h)}Q${f(.25 * w)} ${f(-1.12 * h)} ${f(.6 * w)} ${f(-.96 * h)}` +
+         `C${f(1.05 * w)} ${f(-.7 * h)} ${f(.8 * w)} ${f(-.15 * h)} 0 0Z`,
+      fill: `url(#g-${name}-${j})`, stroke: p[3], 'stroke-opacity': .4, 'stroke-width': .7, 'stroke-linejoin': 'round',
+    }, g);
+    // svetel zavihan rob
+    el('path', {
+      d: `M${f(-.6 * w)} ${f(-.96 * h)}Q${f(-.2 * w)} ${f(-1.1 * h)} 0 ${f(-1.04 * h)}Q${f(.25 * w)} ${f(-1.12 * h)} ${f(.6 * w)} ${f(-.96 * h)}`,
+      fill: 'none', stroke: '#fff', 'stroke-opacity': .5, 'stroke-width': f(Math.max(.9, h * .035)), 'stroke-linecap': 'round',
+    }, g);
+    // fine žilice
+    el('path', {
+      d: `M0 ${f(-.12 * h)}L${f(-.18 * w)} ${f(-.75 * h)}M0 ${f(-.12 * h)}L${f(.2 * w)} ${f(-.78 * h)}`,
+      fill: 'none', stroke: p[3], 'stroke-opacity': .16, 'stroke-width': .6, 'stroke-linecap': 'round',
+    }, g);
+    // senca, ki jo meče zgornji sloj
+    if (shade) el('ellipse', { cx: 0, cy: f(-.12 * h), rx: f(.55 * w), ry: f(.22 * h), fill: p[3], opacity: .18 }, g);
+  }
+
   function drawRose(parent, r) {
     const p = PAL[r.pal];
     const R = r.R;
-    const baseG = el('g', { class: 'layer', style: `--d:${f(r.bloom + 1.04)}s` }, parent);
-    el('circle', { r: R * 0.8, fill: p[3], opacity: .3 }, baseG);
+    el('ellipse', { cx: 0, cy: f(R * .05), rx: f(R * .78), ry: f(R * .74), fill: p[3], opacity: .28 }, parent);
 
+    // zunaj široki, odprti listi; proti sredini vse bolj zaprti in visoki (kot pravi cvet vrtnice)
     const layers = [
-      { n: 6, d: .55, r: .46 },
-      { n: 5, d: .38, r: .40 },
-      { n: 4, d: .22, r: .32 },
-      { n: 3, d: .10, r: .24 },
+      { n: 5, h: .98, w: .50, off: .05, a0: 0,  sc: 1 },
+      { n: 5, h: .80, w: .44, off: .07, a0: 36, sc: 1 },
+      { n: 4, h: .62, w: .38, off: .08, a0: 14, sc: .9 },
+      { n: 3, h: .46, w: .32, off: .08, a0: 50, sc: .85 },
+      { n: 3, h: .30, w: .24, off: .05, a0: 80, sc: .8 },
     ];
     layers.forEach((L, j) => {
-      const g = el('g', { class: 'layer', style: `--d:${f(r.bloom + .2 + (3 - j) * .28)}s` }, parent);
+      const g = el('g', { class: 'layer', style: `--d:${f(r.bloom + .2 + (4 - j) * .24)}s` }, parent);
+      const base = L.a0 + r.R * 11;
+      const gi = Math.min(j, 3);
       for (let k = 0; k < L.n; k++) {
-        const ang = (j * 29 + r.R * 7 + (k * 360) / L.n) * Math.PI / 180;
-        const rad = R * L.r * (1 + .06 * jit(k + 1, j + r.R));
-        el('circle', {
-          cx: f(R * L.d * Math.cos(ang)), cy: f(R * L.d * Math.sin(ang)), r: f(rad),
-          fill: p[j], stroke: p[3], 'stroke-opacity': .35, 'stroke-width': .8,
-        }, g);
+        const ang = base + (k * 360) / L.n + 8 * jit(k + 2, j + r.R);
+        const s = 1 + .07 * jit(k + 5, j + r.R);
+        petal(g, r.pal, gi, R * L.w * s, R * L.h * s, R * L.off, ang, j > 0);
       }
-      if (j === 3) {                                   // spirala v sredini
-        let d = '';
-        for (let t = 0; t < 5.5 * Math.PI; t += .35) {
-          const rr = R * (.015 + .035 * t / Math.PI);
-          d += (d ? 'L' : 'M') + f(rr * Math.cos(t)) + ' ' + f(rr * Math.sin(t));
-        }
-        el('path', { d, fill: 'none', stroke: p[3], 'stroke-width': f(R * .03), 'stroke-linecap': 'round', opacity: .7 }, g);
+      if (j === 4) {                                   // tesno zvit sredinski popek
+        const cr = R * .13;
+        el('circle', { r: f(cr), fill: p[3] }, g);
+        el('path', { d: `M${f(-cr)} 0A${f(cr)} ${f(cr)} 0 0 1 ${f(cr)} 0`, fill: p[2], opacity: .95 }, g);
+        el('path', { d: `M${f(-cr * .9)} ${f(cr * .15)}Q0 ${f(-cr * 1.2)} ${f(cr * .9)} ${f(cr * .15)}`, fill: 'none', stroke: mix(p[0], .35), 'stroke-width': f(R * .03), 'stroke-linecap': 'round', opacity: .85 }, g);
+        el('path', { d: `M${f(-cr * .5)} ${f(cr * .4)}Q0 ${f(-cr * .3)} ${f(cr * .5)} ${f(cr * .4)}`, fill: 'none', stroke: p[3], 'stroke-width': f(R * .025), 'stroke-linecap': 'round', opacity: .8 }, g);
       }
     });
   }
@@ -150,6 +184,7 @@
   function build() {
     const tap = document.getElementById('tap');
     tap.textContent = '';
+    addGradients(el('defs', {}, tap));
     const gGreen  = el('g', {}, tap);
     const gFill   = el('g', {}, tap);
     const gStems  = el('g', {}, tap);
@@ -182,7 +217,7 @@
 
     // vrtnice
     ROSES.forEach((r, i) => {
-      const sd = .3 + i * .2, dur = 2.8;
+      const sd = .3 + i * .32, dur = 2.8;
       r.bloom = sd + 1.9;
       const c = curve(r.x, r.y);
       addStem(gStems, c, sd, dur, false);
