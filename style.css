@@ -48,7 +48,6 @@ body {
 .ribbon-knot { fill: #c9718c; stroke: #b5647f; stroke-width: .8; }
 
 /* ---- animacija (le ko ima body razred .play) ---- */
-.play .stem  { animation: grow var(--t, 2.8s) cubic-bezier(.45, .05, .3, 1) var(--d, 0s) backwards; }
 .play .twig  { animation: fade 1s ease var(--d, 0s) backwards; }
 .play .dot   { animation: pop .9s cubic-bezier(.2, .8, .2, 1) var(--d, 0s) backwards; }
 .play .leaf  { animation: pop 1s cubic-bezier(.2, .8, .2, 1) var(--d, 0s) backwards; }
@@ -57,7 +56,6 @@ body {
 .play .layer { animation: open 2.2s cubic-bezier(.2, .8, .2, 1) var(--d, 0s) backwards; }
 .play .note  { animation: fade 1.8s ease var(--note-delay, 7s) backwards; }
 
-@keyframes grow { from { stroke-dashoffset: 1; } }
 @keyframes pop  { from { transform: scale(0); opacity: 0; } }
 @keyframes bud  { from { transform: scale(.15); opacity: 0; } }
 @keyframes open { from { transform: scale(.3) rotate(-25deg); opacity: 0; } }
@@ -66,9 +64,7 @@ body {
 /* rahlo zibanje šopka */
 #idle, #tap { transform-origin: 180px 560px; }
 .swaying #idle { animation: idle 11s ease-in-out infinite; }
-#tap.sway { animation: wobble 1.7s ease-out; }
 @keyframes idle   { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(.9deg); } 75% { transform: rotate(-.9deg); } }
-@keyframes wobble { 0% { transform: rotate(0); } 20% { transform: rotate(2.4deg); } 45% { transform: rotate(-1.8deg); } 70% { transform: rotate(.9deg); } 100% { transform: rotate(0); } }
 
 /* ---- besedilo ---- */
 .note {
