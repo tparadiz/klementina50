@@ -1,0 +1,100 @@
+:root {
+  --plum: #8a3f5f;
+  --sage: #86a98a;
+  --sage-deep: #5f8a66;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--plum);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  background: linear-gradient(180deg, #fff7f9 0%, #fadde7 62%, #f1cfe0 100%);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  padding-top: env(safe-area-inset-top);
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, .7), transparent 62%);
+}
+
+.stage svg { width: 100%; height: 100%; overflow: visible; }
+
+/* ---- sestavni deli ---- */
+.stem {
+  fill: none;
+  stroke: var(--sage-deep);
+  stroke-width: 3.4;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+}
+.stub { stroke: var(--sage-deep); stroke-width: 3.4; }
+.leaf-shape { fill: var(--sage); stroke: var(--sage-deep); stroke-width: .6; }
+.leaf-rib { stroke: var(--sage-deep); stroke-width: .8; fill: none; opacity: .7; }
+.ribbon { fill: #d98aa3; stroke: #b5647f; stroke-width: .8; stroke-linejoin: round; }
+.ribbon-knot { fill: #c9718c; stroke: #b5647f; stroke-width: .8; }
+
+/* ---- animacija (le ko ima body razred .play) ---- */
+.play .stem  { animation: grow 2.2s cubic-bezier(.45, .05, .3, 1) var(--d, 0s) backwards; }
+.play .leaf  { animation: pop 1s cubic-bezier(.2, .8, .2, 1) var(--d, 0s) backwards; }
+.play .bow   { animation: pop 1.1s cubic-bezier(.2, .8, .2, 1) var(--d, 0s) backwards; }
+.play .flower{ animation: bud 1.6s ease-out var(--d, 0s) backwards; }
+.play .layer { animation: open 1.9s cubic-bezier(.2, .8, .2, 1) var(--d, 0s) backwards; }
+.play .note  { animation: fade 1.8s ease 5s backwards; }
+
+@keyframes grow { from { stroke-dashoffset: 1; } }
+@keyframes pop  { from { transform: scale(0); opacity: 0; } }
+@keyframes bud  { from { transform: scale(.15); opacity: 0; } }
+@keyframes open { from { transform: scale(.3) rotate(-25deg); opacity: 0; } }
+@keyframes fade { from { opacity: 0; transform: translateY(8px); } }
+
+/* rahlo zibanje šopka */
+#idle, #tap { transform-origin: 180px 560px; }
+.swaying #idle { animation: idle 8s ease-in-out infinite alternate; }
+#tap.sway { animation: wobble 1.7s ease-out; }
+@keyframes idle   { from { transform: rotate(-.9deg); } to { transform: rotate(.9deg); } }
+@keyframes wobble { 0% { transform: rotate(0); } 20% { transform: rotate(2.4deg); } 45% { transform: rotate(-1.8deg); } 70% { transform: rotate(.9deg); } 100% { transform: rotate(0); } }
+
+/* ---- besedilo ---- */
+.note {
+  text-align: center;
+  padding: .5rem 1.5rem calc(1.6rem + env(safe-area-inset-bottom));
+}
+.thought {
+  margin: 0;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1.4rem, 5.6vw, 1.9rem);
+  line-height: 1.35;
+}
+.sign {
+  margin: .7rem 0 0;
+  font-style: italic;
+  font-size: 1.05rem;
+  letter-spacing: .04em;
+  opacity: .75;
+}
+
+/* ---- cvetni listi, ki padajo ---- */
+.petal {
+  position: fixed;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: 80% 0 80% 0;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; }
+}
