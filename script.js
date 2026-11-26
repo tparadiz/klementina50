@@ -77,19 +77,18 @@
     const p = pt(c, t);
     return `translate(${f(p.x)}px, ${f(p.y)}px) rotate(${f((p.ang + 90) * .7)}deg)`;
   };
+  function animateHead(node, c, delay, dur) {                    // glava potuje po koncu stebla, enako kot se steblo riše
+    if (reduceMotion) return;
+    const kf = [];
+    for (let i = 0; i <= SAMPLES; i++) kf.push({ transform: headCss(c, ease(i / SAMPLES)), offset: i / SAMPLES });
+    node.animate(kf, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'backwards' });
+  }
   function animateStem(node, delay, dur) {
     if (reduceMotion) return;
     const kf = [];
     for (let i = 0; i <= SAMPLES; i++) kf.push({ strokeDashoffset: 1 - ease(i / SAMPLES), offset: i / SAMPLES });
     node.animate(kf, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'backwards' });
   }
-  function animateHead(node, c, delay, dur) {
-    if (reduceMotion) return;
-    const kf = [];
-    for (let i = 0; i <= SAMPLES; i++) kf.push({ transform: headCss(c, ease(i / SAMPLES)), offset: i / SAMPLES });
-    node.animate(kf, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'backwards' });
-  }
-
   function addStem(parent, c, delay, dur, thin) {
     const n = el('path', {
       class: 'stem' + (thin ? ' thin' : ''), pathLength: 1,
@@ -150,7 +149,7 @@
   function drawRose(parent, r) {
     const p = PAL[r.pal];
     const R = r.R;
-    const sh = el('g', { class: 'layer', style: `--d:${f(r.bloom + .2 + 4 * .24)}s` }, parent);
+    const sh = el('g', { class: 'layer', style: `--d:${f(r.bloom + .1 + 4 * .2)}s` }, parent);
     el('ellipse', { cx: 0, cy: f(R * .05), rx: f(R * .78), ry: f(R * .74), fill: p[3], opacity: .28 }, sh);
 
     // zunaj široki, odprti listi; proti sredini vse bolj zaprti in visoki (kot pravi cvet vrtnice)
@@ -162,7 +161,7 @@
       { n: 3, h: .30, w: .24, off: .05, a0: 80, sc: .8 },
     ];
     layers.forEach((L, j) => {
-      const g = el('g', { class: 'layer', style: `--d:${f(r.bloom + .2 + (4 - j) * .24)}s` }, parent);
+      const g = el('g', { class: 'layer', style: `--d:${f(r.bloom + .1 + (4 - j) * .2)}s` }, parent);
       const base = L.a0 + r.R * 11;
       const gi = Math.min(j, 3);
       for (let k = 0; k < L.n; k++) {
@@ -247,10 +246,12 @@
       maxEnd = Math.max(maxEnd, sd + dur + .6 + 1);
     });
 
-    // vrtnice: steblo raste, na koncu potuje popek, nato se odpre v vrtnico
+    // vrtnice: ob začetku stebla se pojavi majhen popek in raste z njim; na ~45 % poti postane majhen cvet,
+    // ki raste do konca stebla, kjer je že skoraj največji
     ROSES.forEach((r, i) => {
-      const sd = .3 + i * .35, dur = 3.4;
-      r.bloom = sd + dur - .2;
+      const sd = .3 + i * .4, dur = 4.6;
+      const tip = sd + dur;                                    // steblo doseže končno višino
+      r.bloom = sd + dur * .45;                                // popek preide v cvet
       const c = curve(r.x, r.y);
       addStem(gStems, c, sd, dur, false);
       if (i % 2 === 1) addLeaf(gLeaves, c, .6, i % 4 === 1 ? 1 : -1, .95, growTime(sd, dur, .6) + .1, i % 3 === 0);
@@ -261,24 +262,31 @@
       animateHead(pos, c, sd, dur);
       const fl = el('g', { class: 'flower', style: 'animation:none' }, pos);
 
-      const bud = el('g', { opacity: 0 }, fl);                 // popek, ki potuje, nato izgine, ko se roža odpre
+      const bud = el('g', { opacity: 0 }, fl);                 // popek: vznikne na dnu, raste, nato se spremeni v cvet
       drawBud(bud, { s: r.R * .2, pal: r.pal });
       if (!reduceMotion) {
-        const total = r.bloom + .9 - sd, mid = (r.bloom - sd) / total;
+        const total = dur * .45 + .9, fadeAt = dur * .45 / total;
         bud.animate([
-          { opacity: 0, transform: 'scale(.2)', offset: 0 },
-          { opacity: 1, transform: 'scale(1)', offset: .08 },
-          { opacity: 1, transform: 'scale(1)', offset: mid },
-          { opacity: 0, transform: 'scale(1.5)', offset: 1 },
+          { opacity: 0, transform: 'scale(0)', offset: 0 },
+          { opacity: 1, transform: 'scale(.6)', offset: .4 / total, easing: 'ease-out' },
+          { opacity: 1, transform: 'scale(1.1)', offset: fadeAt },
+          { opacity: 0, transform: 'scale(1.4)', offset: 1 },
         ], { duration: total * 1000, delay: sd * 1000, fill: 'both' });
+        // cvet raste skupaj s steblom: majhen -> skoraj poln ob prihodu na vrh -> poln
+        const cTotal = tip + 1.0 - r.bloom, arrive = (tip - r.bloom) / cTotal;
+        fl.animate([
+          { transform: 'scale(.2)', offset: 0, easing: 'ease-out' },
+          { transform: 'scale(.9)', offset: arrive },
+          { transform: 'scale(1)', offset: 1 },
+        ], { duration: cTotal * 1000, delay: r.bloom * 1000, fill: 'backwards' });
       }
       drawRose(fl, r);
-      maxEnd = Math.max(maxEnd, r.bloom + 3.5);
+      maxEnd = Math.max(maxEnd, tip + 1.6);
     });
 
-    // popki: majhni popki, ki jih rast samo pripelje do konca stebla
+    // popki: majhen popek vznikne na dnu in raste ob steblu do konca
     BUDS.forEach((b, k) => {
-      const sd = 2.2 + k * .35, dur = 3.0, c = curve(b.x, b.y);
+      const sd = 1.8 + k * .4, dur = 4.2, c = curve(b.x, b.y);
       addStem(gStems, c, sd, dur, false);
       addLeaf(gLeaves, c, .7, k % 2 ? 1 : -1, .8, growTime(sd, dur, .7) + .1, false);
       const pos = posOf.get(b);
@@ -286,8 +294,11 @@
       animateHead(pos, c, sd, dur);
       const fl = el('g', { class: 'flower', style: 'animation:none' }, pos);
       drawBud(fl, b);
-      if (!reduceMotion) fl.animate([{ transform: 'scale(.2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
-        { duration: 700, delay: sd * 1000, fill: 'backwards' });
+      if (!reduceMotion) fl.animate([
+        { transform: 'scale(0)', opacity: 0, offset: 0 },
+        { transform: 'scale(.4)', opacity: 1, offset: .08, easing: 'ease-out' },
+        { transform: 'scale(1)', opacity: 1, offset: 1 },
+      ], { duration: dur * 1000, delay: sd * 1000, fill: 'backwards' });
       maxEnd = Math.max(maxEnd, sd + dur + 1);
     });
 
