@@ -391,7 +391,7 @@
   // ---- dotik: šopek na hitro zdrhti (desno, levo, desno, levo) in se ustavi; nato pade nekaj listov ----
   // gre za hitro, dobro dušeno vzmet: vsak dotik doda le sunek, zato ni skokov, tudi če klikaš hitro
   const tapEl = document.getElementById('tap');
-  const K = 1900, C = 13, MAX_ANGLE = 3.2, KICK = 125, MAX_SPEED = 170;   // ~7 nihajev/s, umiri se v ~0,5 s
+  const K = 1400, C = 11, MAX_ANGLE = 1.8, KICK = 42, MAX_SPEED = 95;   // ~7 nihajev/s, umiri se v ~0,5 s
   const spring = { a: 0, v: 0, on: false, t: 0 };
 
   function springStep(now) {
