@@ -87,17 +87,22 @@
     for (let i = 0; i <= SAMPLES; i++) kf.push({ transform: headCss(c, ease(i / SAMPLES)), offset: i / SAMPLES });
     node.animate(kf, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'backwards' });
   }
-  // diskretni skoki: steps = [[čas, vrednost, (trajanje prehoda)], ...]; vmes vrednost miruje
-  function stepFrames(steps, total, prop, tr = .35) {
-    const kf = [{ offset: 0, ...prop(steps[0][1]) }];
-    for (let i = 1; i < steps.length; i++) {
-      const [t, v, d = tr] = steps[i];
-      kf.push({ offset: Math.min(t / total, 1), ...prop(steps[i - 1][1]), easing: 'ease-out' });
-      kf.push({ offset: Math.min((t + d) / total, 1), ...prop(v) });
+  // zvezna rast: fn(p, q) vrne CSS lastnosti; p = pot stebla (0..1), q = zadnja četrtina po prihodu na vrh (0..1)
+  // vzorčimo gosto (vsak ~1/48 poti), brskalnik vmes linearno interpolira, zato ni vidnih skokov
+  function growFrames(fn, dur, tail) {
+    const N = 48, M = 10, total = dur + tail, kf = [];
+    for (let i = 0; i <= N; i++) {
+      const p = i / N;
+      kf.push({ offset: easeInv(p) * dur / total, ...fn(p, 0) });
     }
-    kf.push({ offset: 1, ...prop(steps[steps.length - 1][1]) });
+    for (let j = 1; j <= M; j++) {
+      const q = j / M;
+      kf.push({ offset: (dur + tail * q) / total, ...fn(1, 1 - Math.pow(1 - q, 2)) });
+    }
     return kf;
   }
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
   function animateStem(node, delay, dur) {
     if (reduceMotion) return;
     const kf = [];
@@ -270,7 +275,7 @@
     ROSES.forEach((r, i) => {
       const sd = .3 + i * .35, dur = 5.6;
       const T = (k) => tau(dur, k);
-      r.bloom = sd + T(4);                                     // cvet nastane v 5/8
+      r.bloom = sd + T(3.36);                                  // cvet nastane ob ~42 % poti
       const c = curve(r.x, r.y);
       addStem(gStems, c, sd, dur, false);
       if (i % 2 === 1) addLeaf(gLeaves, c, .6, i % 4 === 1 ? 1 : -1, .95, growTime(sd, dur, .6) + .1, i % 3 === 0);
@@ -283,14 +288,17 @@
       drawBud(bud, { s: r.R * .2, pal: r.pal });
       const fl = el('g', { class: 'flower', style: 'animation:none' }, pos);
       if (!reduceMotion) {
-        bud.animate(stepFrames(
-          [[0, 0], [T(1), .45], [T(2), .7], [T(3), 1], [T(4), 0]],
-          T(4) + .4, v => ({ opacity: v > 0 ? 1 : 0, transform: `scale(${v})` })),
-          { duration: (T(4) + .4) * 1000, delay: sd * 1000, fill: 'both' });
-        fl.animate(stepFrames(
-          [[0, .05], [T(4), .22], [T(5), .36], [T(6), .52], [T(7), .75], [dur, 1, TAIL]],
-          dur + TAIL, v => ({ transform: `scale(${v})` })),
-          { duration: (dur + TAIL) * 1000, delay: sd * 1000, fill: 'backwards' });
+        // popek: vznikne ob 1/8 poti, zvezno raste, ob ~45 % poti se prelije v cvet
+        bud.animate(growFrames((p) => ({
+          opacity: clamp01((p - .125) / .06) * (1 - clamp01((p - .42) / .09)),
+          transform: `scale(${p < .125 ? 0 : (.3 + .8 * clamp01((p - .125) / .36)).toFixed(3)})`,
+        }), dur, 0.01), { duration: dur * 1000, delay: sd * 1000, fill: 'both' });
+        // cvet: majhen nastane ob ~42 % poti, zvezno raste do 3/4 ob prihodu na vrh, nato še zadnja četrtina
+        fl.animate(growFrames((p, q) => {
+          const x = clamp01((p - .42) / .58);
+          const v = p < .42 ? .05 : .12 + .63 * Math.pow(x, .85);
+          return { transform: `scale(${(v + (1 - v) * q).toFixed(3)})` };
+        }, dur, TAIL), { duration: (dur + TAIL) * 1000, delay: sd * 1000, fill: 'backwards' });
       }
       drawRose(fl, r);
       maxEnd = Math.max(maxEnd, sd + dur + TAIL + .4);
@@ -307,10 +315,10 @@
       animateHead(pos, c, sd, dur);
       const fl = el('g', { class: 'flower', style: 'animation:none' }, pos);
       drawBud(fl, b);
-      if (!reduceMotion) fl.animate(stepFrames(
-        [[0, 0], [T(1), .25], [T(2), .4], [T(3), .55], [T(4), .7], [T(5), .8], [T(6), .9], [T(7), 1]],
-        dur, v => ({ transform: `scale(${v})`, opacity: v > 0 ? 1 : 0 })),
-        { duration: dur * 1000, delay: sd * 1000, fill: 'backwards' });
+      if (!reduceMotion) fl.animate(growFrames((p) => ({
+        opacity: clamp01((p - .125) / .06),
+        transform: `scale(${p < .125 ? 0 : (.25 + .75 * Math.pow((p - .125) / .875, .9)).toFixed(3)})`,
+      }), dur, 0.01), { duration: dur * 1000, delay: sd * 1000, fill: 'backwards' });
       maxEnd = Math.max(maxEnd, sd + dur + 1);
     });
 
@@ -380,18 +388,22 @@
     if (ready && !document.hidden && document.querySelectorAll('.petal').length < 5) petalFromRandomFlower();
   }, 3200);
 
-  // ---- dotik: šopek je vzmet; vsak dotik doda le majhen sunek, zato ni skokov ----
+  // ---- dotik: šopek na hitro zdrhti (desno, levo, desno, levo) in se ustavi; nato pade nekaj listov ----
+  // gre za hitro, dobro dušeno vzmet: vsak dotik doda le sunek, zato ni skokov, tudi če klikaš hitro
   const tapEl = document.getElementById('tap');
-  const K = 60, C = 5, MAX_ANGLE = 4, MAX_SPEED = 28;   // trdota vzmeti, dušenje, omejitve (°, °/s)
+  const K = 1900, C = 13, MAX_ANGLE = 3.2, KICK = 125, MAX_SPEED = 170;   // ~7 nihajev/s, umiri se v ~0,5 s
   const spring = { a: 0, v: 0, on: false, t: 0 };
 
   function springStep(now) {
-    const dt = Math.min((now - spring.t) / 1000, .04);
+    const dt = Math.min((now - spring.t) / 1000, .05);
     spring.t = now;
-    spring.v += (-K * spring.a - C * spring.v) * dt;
-    spring.a += spring.v * dt;
+    const n = 4, h = dt / n;                             // podkoraki za stabilnost
+    for (let i = 0; i < n; i++) {
+      spring.v += (-K * spring.a - C * spring.v) * h;
+      spring.a += spring.v * h;
+    }
     spring.a = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, spring.a));
-    if (Math.abs(spring.a) < .01 && Math.abs(spring.v) < .05) {
+    if (Math.abs(spring.a) < .02 && Math.abs(spring.v) < 1) {
       spring.a = spring.v = 0; spring.on = false;
       tapEl.style.transform = '';
       return;
@@ -399,34 +411,19 @@
     tapEl.style.transform = `rotate(${spring.a.toFixed(3)}deg)`;
     requestAnimationFrame(springStep);
   }
-  function kick(dir) {
-    spring.v = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, spring.v + dir * 14));
+  function shake() {
+    spring.v = Math.min(MAX_SPEED, spring.v + KICK);     // vedno najprej desno
     if (!spring.on) { spring.on = true; spring.t = performance.now(); requestAnimationFrame(springStep); }
   }
 
-  // vrtnica pod prstom se za hip rahlo poveča
-  function bounceFlowerAt(x, y) {
-    let best = null, bd = Infinity;
-    document.querySelectorAll('.flower').forEach(fl => {
-      const b = fl.getBoundingClientRect();
-      const d = Math.hypot(x - (b.left + b.width / 2), y - (b.top + b.height / 2));
-      if (d < Math.min(b.width, b.height) * .65 && d < bd) { best = fl; bd = d; }
-    });
-    if (!best || (best._bounce && best._bounce.playState === 'running')) return;
-    best._bounce = best.animate(
-      [{ transform: 'scale(1)' }, { transform: 'scale(1.1)', offset: .35 }, { transform: 'scale(1)' }],
-      { duration: 650, easing: 'ease-in-out' });
-  }
-
   let lastTapAt = 0;
-  document.addEventListener('pointerdown', (e) => {
+  document.addEventListener('pointerdown', () => {
     if (!ready || reduceMotion) return;
-    kick(e.clientX < innerWidth / 2 ? 1 : -1);
-    bounceFlowerAt(e.clientX, e.clientY);
+    shake();
     const now = performance.now();
-    if (now - lastTapAt < 400) return;                   // listi le občasno, ne ob vsakem hitrem kliku
+    if (now - lastTapAt < 500) return;                   // listi le občasno, ne ob vsakem hitrem kliku
     lastTapAt = now;
-    for (let i = 0; i < 3; i++) setTimeout(petalFromRandomFlower, i * 140);
+    for (let i = 0; i < 4; i++) setTimeout(petalFromRandomFlower, 120 + i * 170);
   });
 
   // če se vrne po daljšem času, naj roža znova zacveti
