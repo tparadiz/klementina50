@@ -93,11 +93,11 @@
     const N = 48, M = 10, total = dur + tail, kf = [];
     for (let i = 0; i <= N; i++) {
       const p = i / N;
-      kf.push({ offset: easeInv(p) * dur / total, ...fn(p, 0) });
+      kf.push({ offset: i === 0 ? 0 : Math.min(1, easeInv(p) * dur / total), ...fn(p, 0) });
     }
     for (let j = 1; j <= M; j++) {
       const q = j / M;
-      kf.push({ offset: (dur + tail * q) / total, ...fn(1, 1 - Math.pow(1 - q, 2)) });
+      kf.push({ offset: j === M ? 1 : Math.min(1, (dur + tail * q) / total), ...fn(1, 1 - Math.pow(1 - q, 2)) });
     }
     return kf;
   }
