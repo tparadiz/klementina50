@@ -63,12 +63,40 @@
       ang: Math.atan2(2 * u * (c.cy - O.y) + 2 * t * (c.ty - c.cy), 2 * u * (c.cx - O.x) + 2 * t * (c.tx - c.cx)) * 180 / Math.PI,
     };
   }
+  // ---- rast: steblo se riše, glava (popek) potuje po njegovem koncu ----
+  const ease = (t) => (1 - Math.cos(Math.PI * t)) / 2;           // mehek začetek in konec
+  const easeInv = (u) => Math.acos(1 - 2 * Math.min(Math.max(u, 0), 1)) / Math.PI;
+  const growTime = (sd, dur, t) => sd + dur * easeInv(t);        // kdaj konica stebla doseže točko t
+  const SAMPLES = 28;
+
+  function headTransform(c, t) {
+    const p = pt(c, t);
+    return `translate(${f(p.x)} ${f(p.y)}) rotate(${f((p.ang + 90) * .7)})`;
+  }
+  const headCss = (c, t) => {                                    // CSS zapis (z enotami) za animacije
+    const p = pt(c, t);
+    return `translate(${f(p.x)}px, ${f(p.y)}px) rotate(${f((p.ang + 90) * .7)}deg)`;
+  };
+  function animateStem(node, delay, dur) {
+    if (reduceMotion) return;
+    const kf = [];
+    for (let i = 0; i <= SAMPLES; i++) kf.push({ strokeDashoffset: 1 - ease(i / SAMPLES), offset: i / SAMPLES });
+    node.animate(kf, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'backwards' });
+  }
+  function animateHead(node, c, delay, dur) {
+    if (reduceMotion) return;
+    const kf = [];
+    for (let i = 0; i <= SAMPLES; i++) kf.push({ transform: headCss(c, ease(i / SAMPLES)), offset: i / SAMPLES });
+    node.animate(kf, { duration: dur * 1000, delay: delay * 1000, easing: 'linear', fill: 'backwards' });
+  }
+
   function addStem(parent, c, delay, dur, thin) {
-    el('path', {
+    const n = el('path', {
       class: 'stem' + (thin ? ' thin' : ''), pathLength: 1,
       d: `M${O.x} ${O.y} Q${f(c.cx)} ${f(c.cy)} ${c.tx} ${c.ty}`,
-      style: `--d:${f(delay)}s;--t:${f(dur)}s`,
     }, parent);
+    animateStem(n, delay, dur);
+    return n;
   }
   function addLeaf(parent, c, t, side, scale, delay, alt) {
     const p = pt(c, t);
@@ -122,7 +150,8 @@
   function drawRose(parent, r) {
     const p = PAL[r.pal];
     const R = r.R;
-    el('ellipse', { cx: 0, cy: f(R * .05), rx: f(R * .78), ry: f(R * .74), fill: p[3], opacity: .28 }, parent);
+    const sh = el('g', { class: 'layer', style: `--d:${f(r.bloom + .2 + 4 * .24)}s` }, parent);
+    el('ellipse', { cx: 0, cy: f(R * .05), rx: f(R * .78), ry: f(R * .74), fill: p[3], opacity: .28 }, sh);
 
     // zunaj široki, odprti listi; proti sredini vse bolj zaprti in visoki (kot pravi cvet vrtnice)
     const layers = [
@@ -192,62 +221,78 @@
     const gBow    = el('g', { transform: `translate(${O.x} ${O.y})` }, tap);
     const gFlow   = el('g', {}, tap);
     let maxEnd = 0;
-    const flowers = [];
 
     // odrezani konci stebel pod pentljo
     [[-9, 54], [0, 58], [9, 54]].forEach(([dx, dy]) =>
       el('line', { class: 'stub', x1: O.x, y1: O.y, x2: O.x + dx, y2: O.y + dy }, gStems));
 
+    // glave rož: spodnje narišemo čez zgornje (vrstni red v DOM-u je enak že od začetka)
+    const posOf = new Map();
+    [...ROSES, ...BUDS].sort((p, q) => p.y - q.y).forEach(o => posOf.set(o, el('g', {}, gFlow)));
+
     // zelenje v ozadju
     GREENS.forEach(([x, y], i) => {
-      const sd = .5 + i * .25, dur = 2.2, c = curve(x, y);
+      const sd = .5 + i * .25, dur = 2.8, c = curve(x, y);
       addStem(gGreen, c, sd, dur, false);
-      [.45, .62, .78].forEach((t, k) => addLeaf(gGreen, c, t, (i + k) % 2 ? 1 : -1, 1.05 + .15 * k, sd + dur * t + .1, k % 2));
+      [.45, .62, .78].forEach((t, k) => addLeaf(gGreen, c, t, (i + k) % 2 ? 1 : -1, 1.05 + .15 * k, growTime(sd, dur, t) + .1, k % 2));
       addLeaf(gGreen, c, 1, 0, 1.2, sd + dur, true);
       maxEnd = Math.max(maxEnd, sd + dur + 1);
     });
 
     // drobne vejice
     SPRIGS.forEach(([x, y], k) => {
-      const sd = 1.4 + k * .3, dur = 2.4, c = curve(x, y);
+      const sd = 1.4 + k * .3, dur = 3.0, c = curve(x, y);
       addStem(gFill, c, sd, dur, true);
-      drawSprig(gFill, x, y, k, sd + dur - 1.4);
-      maxEnd = Math.max(maxEnd, sd + dur - 1.4 + 2.0 + .6 + 1);
+      drawSprig(gFill, x, y, k, sd + dur - 2.0);
+      maxEnd = Math.max(maxEnd, sd + dur + .6 + 1);
     });
 
-    // vrtnice
+    // vrtnice: steblo raste, na koncu potuje popek, nato se odpre v vrtnico
     ROSES.forEach((r, i) => {
-      const sd = .3 + i * .32, dur = 2.8;
-      r.bloom = sd + 1.9;
+      const sd = .3 + i * .35, dur = 3.4;
+      r.bloom = sd + dur - .2;
       const c = curve(r.x, r.y);
       addStem(gStems, c, sd, dur, false);
-      if (i % 2 === 1) addLeaf(gLeaves, c, .6, i % 4 === 1 ? 1 : -1, .95, sd + dur * .6 + .1, i % 3 === 0);
-      if (i > 5 && i % 2 === 0) addLeaf(gLeaves, c, .5, 1, .9, sd + dur * .5 + .1, true);
+      if (i % 2 === 1) addLeaf(gLeaves, c, .6, i % 4 === 1 ? 1 : -1, .95, growTime(sd, dur, .6) + .1, i % 3 === 0);
+      if (i > 5 && i % 2 === 0) addLeaf(gLeaves, c, .5, 1, .9, growTime(sd, dur, .5) + .1, true);
 
-      const pos = el('g', { transform: `translate(${r.x} ${r.y}) rotate(${r.rot})` });
-      const fl = el('g', { class: 'flower', style: `--d:${f(r.bloom)}s` }, pos);
+      const pos = posOf.get(r);
+      pos.setAttribute('transform', headTransform(c, 1));      // končni položaj (tudi brez animacij)
+      animateHead(pos, c, sd, dur);
+      const fl = el('g', { class: 'flower', style: 'animation:none' }, pos);
+
+      const bud = el('g', { opacity: 0 }, fl);                 // popek, ki potuje, nato izgine, ko se roža odpre
+      drawBud(bud, { s: r.R * .2, pal: r.pal });
+      if (!reduceMotion) {
+        const total = r.bloom + .9 - sd, mid = (r.bloom - sd) / total;
+        bud.animate([
+          { opacity: 0, transform: 'scale(.2)', offset: 0 },
+          { opacity: 1, transform: 'scale(1)', offset: .08 },
+          { opacity: 1, transform: 'scale(1)', offset: mid },
+          { opacity: 0, transform: 'scale(1.5)', offset: 1 },
+        ], { duration: total * 1000, delay: sd * 1000, fill: 'both' });
+      }
       drawRose(fl, r);
-      flowers.push({ y: r.y, node: pos });
-      maxEnd = Math.max(maxEnd, r.bloom + 1.04 + 2.2);
+      maxEnd = Math.max(maxEnd, r.bloom + 3.5);
     });
 
-    // popki
+    // popki: majhni popki, ki jih rast samo pripelje do konca stebla
     BUDS.forEach((b, k) => {
-      const sd = 2.2 + k * .35, dur = 2.4, c = curve(b.x, b.y);
+      const sd = 2.2 + k * .35, dur = 3.0, c = curve(b.x, b.y);
       addStem(gStems, c, sd, dur, false);
-      addLeaf(gLeaves, c, .7, k % 2 ? 1 : -1, .8, sd + dur * .7 + .1, false);
-      const pos = el('g', { transform: `translate(${b.x} ${b.y}) rotate(${b.rot})` });
-      const fl = el('g', { class: 'flower', style: `--d:${f(sd + dur - .5)}s` }, pos);
+      addLeaf(gLeaves, c, .7, k % 2 ? 1 : -1, .8, growTime(sd, dur, .7) + .1, false);
+      const pos = posOf.get(b);
+      pos.setAttribute('transform', headTransform(c, 1));
+      animateHead(pos, c, sd, dur);
+      const fl = el('g', { class: 'flower', style: 'animation:none' }, pos);
       drawBud(fl, b);
-      flowers.push({ y: b.y, node: pos });
-      maxEnd = Math.max(maxEnd, sd + dur + 1.4);
+      if (!reduceMotion) fl.animate([{ transform: 'scale(.2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }],
+        { duration: 700, delay: sd * 1000, fill: 'backwards' });
+      maxEnd = Math.max(maxEnd, sd + dur + 1);
     });
-
-    // spodnje cvetove narišemo čez zgornje
-    flowers.sort((a, b) => a.y - b.y).forEach(o => gFlow.appendChild(o.node));
 
     // pentlja
-    const bow = el('g', { class: 'bow', style: '--d:2.4s' }, gBow);
+    const bow = el('g', { class: 'bow', style: '--d:1.6s' }, gBow);
     el('path', { class: 'ribbon', d: 'M0 0C-14 -26 -42 -22 -38 -2C-35 14 -12 8 0 0Z' }, bow);
     el('path', { class: 'ribbon', d: 'M0 0C14 -26 42 -22 38 -2C35 14 12 8 0 0Z' }, bow);
     el('path', { class: 'ribbon', d: 'M-2 4C-8 24 -18 36 -26 48L-12 44L-6 54C-2 36 0 22 2 6Z' }, bow);
@@ -261,7 +306,7 @@
   const petalColors = [['#fbd0dc', '#f09ab8'], ['#f9d9e2', '#e58fab'], ['#ffe1d2', '#f2a084'], ['#f3a6c6', '#dc5f8e']];
 
   function dropPetal(x, y) {
-    if (reduceMotion) return;
+    if (reduceMotion || document.querySelectorAll('.petal').length >= 8) return;
     const p = document.createElement('i');
     const [a, b] = petalColors[Math.floor(Math.random() * petalColors.length)];
     const size = 11 + Math.random() * 8;
@@ -312,14 +357,53 @@
     if (ready && !document.hidden && document.querySelectorAll('.petal').length < 5) petalFromRandomFlower();
   }, 3200);
 
-  // dotik: šopek se zazibá, nekaj listov pade
-  document.addEventListener('pointerdown', () => {
+  // ---- dotik: šopek je vzmet; vsak dotik doda le majhen sunek, zato ni skokov ----
+  const tapEl = document.getElementById('tap');
+  const K = 60, C = 5, MAX_ANGLE = 4, MAX_SPEED = 28;   // trdota vzmeti, dušenje, omejitve (°, °/s)
+  const spring = { a: 0, v: 0, on: false, t: 0 };
+
+  function springStep(now) {
+    const dt = Math.min((now - spring.t) / 1000, .04);
+    spring.t = now;
+    spring.v += (-K * spring.a - C * spring.v) * dt;
+    spring.a += spring.v * dt;
+    spring.a = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, spring.a));
+    if (Math.abs(spring.a) < .01 && Math.abs(spring.v) < .05) {
+      spring.a = spring.v = 0; spring.on = false;
+      tapEl.style.transform = '';
+      return;
+    }
+    tapEl.style.transform = `rotate(${spring.a.toFixed(3)}deg)`;
+    requestAnimationFrame(springStep);
+  }
+  function kick(dir) {
+    spring.v = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, spring.v + dir * 14));
+    if (!spring.on) { spring.on = true; spring.t = performance.now(); requestAnimationFrame(springStep); }
+  }
+
+  // vrtnica pod prstom se za hip rahlo poveča
+  function bounceFlowerAt(x, y) {
+    let best = null, bd = Infinity;
+    document.querySelectorAll('.flower').forEach(fl => {
+      const b = fl.getBoundingClientRect();
+      const d = Math.hypot(x - (b.left + b.width / 2), y - (b.top + b.height / 2));
+      if (d < Math.min(b.width, b.height) * .65 && d < bd) { best = fl; bd = d; }
+    });
+    if (!best || (best._bounce && best._bounce.playState === 'running')) return;
+    best._bounce = best.animate(
+      [{ transform: 'scale(1)' }, { transform: 'scale(1.1)', offset: .35 }, { transform: 'scale(1)' }],
+      { duration: 650, easing: 'ease-in-out' });
+  }
+
+  let lastTapAt = 0;
+  document.addEventListener('pointerdown', (e) => {
     if (!ready || reduceMotion) return;
-    const tap = document.getElementById('tap');
-    tap.classList.remove('sway');
-    void tap.getBoundingClientRect();
-    tap.classList.add('sway');
-    for (let i = 0; i < 6; i++) setTimeout(petalFromRandomFlower, i * 120);
+    kick(e.clientX < innerWidth / 2 ? 1 : -1);
+    bounceFlowerAt(e.clientX, e.clientY);
+    const now = performance.now();
+    if (now - lastTapAt < 400) return;                   // listi le občasno, ne ob vsakem hitrem kliku
+    lastTapAt = now;
+    for (let i = 0; i < 3; i++) setTimeout(petalFromRandomFlower, i * 140);
   });
 
   // če se vrne po daljšem času, naj roža znova zacveti
